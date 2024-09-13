@@ -10,6 +10,7 @@ class RawClient:
         self.listen_port = listen_port
         self.is_sending = False
         self.stop_listening = threading.Event()
+        self.buffer_size = 1024 
 
     def listen_on_port(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
@@ -23,8 +24,17 @@ class RawClient:
                     try:
                         connection, client_address = server_socket.accept()
                         with connection:
-                            data = connection.recv(1024)
-                            if data:
+                            data = b'' 
+                            while True:
+                                chunk = connection.recv(self.buffer_size)
+                                if not chunk:
+                                    break
+                                data += chunk  
+                                
+                                if len(data) > 65536: 
+                                    print("[ERROR] Data size exceeds limit. Disconnecting.")
+                                    break
+                                
                                 try:
                                     decoded_data = data.decode('utf-8', errors='ignore') 
                                     print(f"\n[RECEIVED] From {client_address[0]}:{client_address[1]}: {decoded_data}")
@@ -54,10 +64,13 @@ class RawClient:
 
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(5)  
                     s.connect((self.ip, self.port))
                     print(f"[CONNECTED] to {self.ip}:{self.port} from local port {s.getsockname()[1]}.")
                     s.sendall(message.encode('utf-8'))
                     print(f"[SENT] {message}")
+            except socket.timeout:
+                print("[ERROR] Connection timed out.")
             except Exception as e:
                 print(f"[ERROR] While sending: {e}")
 
